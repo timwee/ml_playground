@@ -106,6 +106,56 @@ class AdaDelta:
 
 ############################################
 
+class Adamax:
+	"""
+	Default params from paper
+
+	# Arguments:
+		lr: float >= 0. Learning rate.
+	    beta_1: float, 0 < beta < 1. Generally close to 1.
+	    beta_2: float, 0 < beta < 1. Generally close to 1.
+	    epsilon: float >= 0. Fuzz factor.
+	- [Adam - A Method for Stochastic Optimization](http://arxiv.org/abs/1412.6980v8)
+	"""
+	def __init__(self, lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=EPS, decay=0.0, num_epochs=100, batchsize=64, l2_reg=1e-3):
+		self.lr = lr
+		self.beta_1 = beta_1
+		self.beta_2 = beta_2
+		self.epsilon = epsilon
+		self.decay = decay
+		self.num_epochs = num_epochs
+		self.batchsize = batchsize
+		self.l2_reg = l2_reg
+
+	def run(self, W, X, y, grad_loss_func):
+		num_rows = X.shape[0]
+		last_loss = 0
+		lrate = self.lr
+
+		# first and second moments of gradients
+		ms = np.zeros(W.shape)
+		# infinity norm for normalizing denom instead of L2
+		infs = np.zeros(W.shape)
+		for it in range(self.num_epochs):
+			# shortcut mentioned in paper
+			lr_t = lrate / (1. - math.pow(self.beta_1, it + 1))
+			for offset in range(0, num_rows, self.batchsize):
+				minibatch = X[offset:min(num_rows, offset+self.batchsize),:]
+				y_minibatch = y[offset:offset+self.batchsize]
+				loss, dW = grad_loss_func(W, minibatch, y_minibatch, self.l2_reg)
+
+				ms = (self.beta_1 * ms) + (1. - self.beta_1) * dW
+				infs = np.maximum(self.beta_2 * infs, np.abs(dW))
+				W -= lr_t * (ms / (infs + self.epsilon))
+				last_loss = loss
+			if self.decay > 0:
+				lrate *= 1. / (1. + (self.decay * it))
+			print("iteration %d, loss %f" % (it, last_loss))
+
+		return last_loss
+
+############################################
+
 class Adam:
 	"""
 	Default params from paper

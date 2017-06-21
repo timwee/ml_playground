@@ -28,10 +28,7 @@ class SGDOptimizer:
 		        #loss_history.append(loss)
 		        last_loss = loss
 		        W += -lrate * dW
-		        #b += -lrate * db
-	        lrate *= 1. / (1. + (self.decay * it))
-		        
-		    #if it % 10 == 0:
+		    lrate *= 1. / (1. + (self.decay * it))
 		    print("iteration %d, loss %f" % (it, last_loss))
 		    #if (it % 10) == 0 and it > 0 and self.lr_sched:
 		    	#print("lessening learning rate from %f to %f" % (lrate, lrate * DECAY))
@@ -55,8 +52,7 @@ class SGDOptimizer:
 		        #loss_history.append(loss)
 		        last_loss = loss
 		        W += -lrate * dW
-		        #b += -lrate * db
-	        lrate *= 1. / (1. + (self.decay * it))
+		    lrate *= 1. / (1. + (self.decay * it))
 		    #if it % 10 == 0:
 		    print("iteration %d, loss %f" % (it, last_loss))
 		    # if (it % 10) == 0 and it > 0 and self.lr_sched:
