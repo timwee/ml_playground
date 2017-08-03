@@ -1,5 +1,7 @@
 #! /usr/bin/env python
 
+# Reference http://www.ams.org/samplings/feature-column/fcarc-pagerank
+
 from scipy.sparse import coo_matrix, csr_matrix
 import numpy as np
 
