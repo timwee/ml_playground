@@ -1,4 +1,7 @@
-# copied from https://github.com/louridas/pagerank/blob/master/python/pageRank.py
+# For testing, compare sparse implementation with naive
+# copied naive version from https://github.com/louridas/pagerank/blob/master/python/pageRank.py
+
+
 # PageRank Python implementation by Vincent Kraeutler, at:
 # http://kraeutler.net/vincent/essays/google%20page%20rank%20in%20python
 #
