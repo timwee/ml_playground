@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import numpy as np
+from math import sqrt
 
 DEFAULT_C1 = 1e-4
 EPS = 1e-7
@@ -64,8 +65,8 @@ def backtracking_linesearch(f, df, x, p, **kwargs):
 
 
 def _backtracking_linesearch(f, df, alpha_init=1, max_iter=40, shrink_factor=0.5, grow_factor=2.1, c1=DEFAULT_C1, \
-                            c2=DEFAULT_C2, min_step_size=1e-10, max_step_size=100, \
-                            use_wolfe=True, use_strong_wolfe=True, decay=None, decay_iter_start=5):
+                             c2=DEFAULT_C2, min_step_size=1e-10, max_step_size=100, \
+                             use_wolfe=True, use_strong_wolfe=True, decay=None, decay_iter_start=5):
     """
     Parameters
     ----------
@@ -230,5 +231,236 @@ def _interpolating_line_search(f, df, alpha_init=1, max_iter=40, c1=DEFAULT_C1, 
         dfk = dfquad
         dfquad = dfcubic
     return None, fquad, dfquad
+
+#########################################################################################################
+
+def strong_wolfe_with_zoom(f, df, x, p, **kwargs):
+    func_calls = [0]
+    dfunc_calls = [0]
+    def phi(alphak):
+        func_calls[0] += 1
+        return f(x + alphak * p)
+    def dphi(alphak):
+        dfunc_calls[0] += 1
+        return np.dot(df(x + alphak * p), p)
+    return _strong_wolfe_with_zoom(phi, dphi, **kwargs), func_calls[0], dfunc_calls[0]
+
+def _cubicmin(a, fa, fpa, b, fb, c, fc):
+    """
+    Finds the minimizer for a cubic polynomial that goes through the
+    points (a,fa), (b,fb), and (c,fc) with derivative at a of fpa.
+    If no minimizer can be found return None
+    """
+    # f(x) = A *(x-a)^3 + B*(x-a)^2 + C*(x-a) + D
+
+    with np.errstate(divide='raise', over='raise', invalid='raise'):
+        try:
+            C = fpa
+            db = b - a
+            dc = c - a
+            denom = (db * dc) ** 2 * (db - dc)
+            d1 = np.empty((2, 2))
+            d1[0, 0] = dc ** 2
+            d1[0, 1] = -db ** 2
+            d1[1, 0] = -dc ** 3
+            d1[1, 1] = db ** 3
+            [A, B] = np.dot(d1, np.asarray([fb - fa - C * db,
+                                            fc - fa - C * dc]).flatten())
+            A /= denom
+            B /= denom
+            radical = B * B - 3 * A * C
+            xmin = a + (-B + np.sqrt(radical)) / (3 * A)
+        except ArithmeticError:
+            return None
+    if not np.isfinite(xmin):
+        return None
+    return xmin
+
+
+def _quadmin(a, fa, fpa, b, fb):
+    """
+    Finds the minimizer for a quadratic polynomial that goes through
+    the points (a,fa), (b,fb) with derivative at a of fpa,
+    """
+    # f(x) = B*(x-a)^2 + C*(x-a) + D
+    with np.errstate(divide='raise', over='raise', invalid='raise'):
+        try:
+            D = fa
+            C = fpa
+            db = b - a * 1.0
+            B = (fb - D - C * db) / (db * db)
+            xmin = a - C / (2.0 * B)
+        except ArithmeticError:
+            return None
+    if not np.isfinite(xmin):
+        return None
+    return xmin
+
+
+def _cubic_interpolate(alpha_0, alpha_1, f_0, f_1, df_0, df_1):
+    """ 
+    pg. 59 from Nocedal/Wright 
+    we do a subscript of 0 for i, and 1 for i+1
+    """
+    d1 = df_0 + (df_1 - (3 * (f_0 - f_1) / (alpha_0 - alpha_1)))
+    # in the book, they have a sign of (alpha_i - alpha_i-1), but we ensure that this is always positive
+    d2 = sqrt((d1 ** 2.0) - (df_0 * df_1))
+    alpha_j = alpha_1 - (alpha_1 - alpha_0) * \
+        ((df_1 + d2 - d1) / (df_1 - df_0 + 2 * d2))
+
+    dalpha = (alpha_1 - alpha_0)
+    min_allowed = alpha_0 + 0.05 * dalpha
+    max_allowed = alpha_0 + 0.95 * dalpha
+    if alpha_j < min_allowed:
+        return min_allowed
+    elif alpha_j > max_allowed:
+        return max_allowed
+    return alpha_j
+
+def _zoom_interpolate(i, alpha_lo, alpha_hi, alpha_0, f_lo, f_hi, f_0, df_lo, df_hi, df_0, alpha_rec, f_rec):
+    #return _cubic_interpolate(alpha_lo, alpha_hi, f_lo, f_hi, df_lo, df_hi)
+    delta1 = 0.2  # cubic interpolant check
+    delta2 = 0.1  # quadratic interpolant check
+    
+    dalpha = alpha_hi - alpha_lo
+    a, b = alpha_lo, alpha_hi
+    if dalpha < 0:
+        a, b = alpha_hi, alpha_lo
+
+    a_j = None
+    if (i > 0):
+        cchk = delta1 * dalpha
+        a_j = _cubicmin(alpha_lo, f_lo, df_lo, alpha_hi, f_hi,
+                        alpha_rec, f_rec)
+    if (i == 0) or (a_j is None) or (a_j > b - cchk) or (a_j < a + cchk):
+        qchk = delta2 * dalpha
+        a_j = _quadmin(alpha_lo, f_lo, df_lo, alpha_hi, f_hi)
+        if (a_j is None) or (a_j > b-qchk) or (a_j < a+qchk):
+            a_j = alpha_lo + 0.5*dalpha
+    return a_j
+
+def _zoom(f, df, alpha_lo, alpha_hi, alpha_0, f_lo, f_hi, f_0, df_lo, df_hi, df_0, c1, c2, max_zoom_iter=40):
+    """
+    From Nocedal/Wright:
+    We now specify the function zoom, which requires a little explanation. The order of its 
+    input arguments is such that each call has the form zoom(αlo,αhi), where
+    (a) the interval bounded by αlo and αhi contains step lengths that satisfy the strong Wolfe conditions;
+    (b) αlo is, among all step lengths generated so far and satisfying the sufficient decrease condition, 
+        the one giving the smallest function value; and
+    (c) αhi is chosen so that φ (αlo)(αhi − αlo) < 0.
+    Each iteration of zoom generates an iterate αj between αlo and αhi, and then replaces one
+    of these end points by αj in such a way that the properties(a), (b), and (c)continue to hold.
+    Algorithm 3.6 (zoom). repeat
+        Interpolate (using quadratic, cubic, or bisection) to find 
+            a trial step length αj between αlo and αhi;
+        Evaluate φ(αj );
+        if φ(αj ) > φ(0) + c1 * αj * φ'(0) or φ(αj ) ≥ φ(αlo)
+             αhi ←αj; 
+        else
+            Evaluate φ'(αj );
+            if |φ'(αj )| ≤ −c2φ'(0)
+                Set α∗ ← αj and stop; 
+            if φ'(αj)(αhi −αlo) ≥ 0
+                αhi ← αlo;
+            αlo ←αj;
+    end (repeat)
+    """
+    
+    alpha_rec = 0
+    f_rec = f_0
+    for i in range(max_zoom_iter):
+        if alpha_lo > alpha_hi:
+            alpha_j = _zoom_interpolate(i, alpha_hi, alpha_lo, alpha_0, f_hi, f_lo, f_0, df_hi, df_lo, df_0, alpha_rec, f_rec)
+        else:
+            alpha_j = _zoom_interpolate(i, alpha_lo, alpha_hi, alpha_0, f_lo, f_hi, f_0, df_lo, df_hi, df_0, alpha_rec, f_rec)
+        f_j = f(alpha_j)
+        df_j = df(alpha_j)
+        if f_j > (f_0 + c1 * alpha_j * df_0) or f_j >= f_lo:
+            alpha_rec = alpha_hi
+            f_rec = f_hi
+            alpha_hi = alpha_j
+            f_hi = f_j
+            df_hi = df_j
+        else:
+            if abs(df_j) <= -c2 * df_0:
+                return alpha_j
+            if df_j * (alpha_hi - alpha_lo) >= 0:
+                f_rec = f_hi
+                alpha_rec = alpha_hi
+                alpha_hi = alpha_lo
+                f_hi = f_lo
+                df_hi = df_lo
+            else:
+                alpha_rec = alpha_lo
+                f_rec = f_lo
+            alpha_lo = alpha_j
+            f_lo = f_j
+            df_lo = df_j
+    print("Didn't find appropriate value in zoom")
+    return None
+
+
+def _strong_wolfe_with_zoom(f, df, alpha_init=0, max_iter=100, c1=DEFAULT_C1, \
+                            c2=DEFAULT_C2, min_step_size=1e-10, max_step_size=1e10, **kwargs):
+    f0, df0 = f(0.0), df(0.0)
+    alphaprev = 0.0
+
+    # In Nocedal, Wright, this was left unspecified.
+    alphak = 1.0
+    while np.isnan(f(alphak)):
+        # in case we set this to be too large
+        alphak /= 2.
+
+    if alphak <= min_step_size:
+        print("alphak is <= min_step_size before loop!")
+        return None, f0, df0
+    fprev, dfprev = f0, df0
+    fk, dfk = f(alphak), df(alphak)
+    for i in range(max_iter):
+        if fk > (f0 + c1 * alphak * df0) or fk >= fprev and i > 0:
+            alpha_zoom = _zoom(f, df, alphaprev, alphak, alpha_init, fprev, fk, f0, \
+                dfprev, dfk, df0, c1, c2)
+            if not alpha_zoom:
+                alpha_zoom = alphak
+            return alpha_zoom, f(alpha_zoom), df(alpha_zoom)
+        if np.abs(dfk) <= -c2 * df0:
+            return alphak, fk, dfk
+        if dfk >= 0:
+            alpha_zoom = _zoom(f, df, alphak, alphaprev, alpha_init, fk, fprev, f0, \
+                dfk, dfprev, df0, c1, c2)
+            if not alpha_zoom:
+                alpha_zoom = alphak
+            return alpha_zoom, f(alpha_zoom), df(alpha_zoom)
+        alphaprev = alphak 
+        alphak *= 1.25
+        fprev = fk
+        fk = f(alphak)
+        dfprev = dfk
+        dfk = df(alphak)
+        if alphak > max_step_size:
+            print("reached max step size")
+            return max_step_size, fk, dfk
+    else:
+        print("didn't converge")
+        return None, fk, dfk
+    return alphak, fk, dfk
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
