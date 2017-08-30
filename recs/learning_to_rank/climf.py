@@ -55,6 +55,45 @@ class CLiMF(LTRBase):
                 result += np.sum(np.log(1. - sigmoid(fk_minus_fj)))
         return result
 
+    def predict_rank(self, test, train_interactions, user_features=None, item_features=None, \
+                    num_threads=1, filter_train=True):
+        """
+        Follow signature of lightfm to use their evaluation code
+        Output is a sparse matrix ranking the interactions in test parameter for each user
+        """
+        num_users, num_items = test.shape
+        ranks = csr_matrix((np.zeros_like(test.data),
+                            test.indices,
+                            test.indptr), shape=test.shape)
+        for usr in range(num_users):
+            row_start, row_stop = test.indptr[usr], test.indptr[usr+1]
+            pos_item_idxs, pos_item_vals = nnz_csrrow(test, usr)
+            predictions = np.zeros((pos_item_idxs.shape[0]))
+            item_ids = np.zeros((pos_item_idxs.shape[0]))
+            for idx, pos_item in enumerate(pos_item_idxs):
+                predictions[idx] = self._predict(usr, pos_item)
+                item_ids[idx] = pos_item
+            trn_item_idxs, _ = nnz_csrrow(train_interactions, usr)
+            trn_item_set = set(trn_item_idxs)
+
+            usr_item_scores = self._predict_for_user(usr)
+            for item_id in range(num_items):
+                if item_id in trn_item_set and filter_train:
+                    continue
+                cur_item_score = usr_item_scores[item_id]
+                #cur_item_score = self._predict(usr, item_id)
+                for i in range(row_stop - row_start):
+                    if item_id != item_ids[i] and cur_item_score >= predictions[i]:
+                        ranks.data[row_start + i] += 1.0
+        return ranks
+                
+    def _predict_for_user(self, usr_id):
+        """
+        returns vector of predictions for all items
+        """
+        user_embedding = self.user_embeddings[usr_id,:]
+        return np.dot(self.item_embeddings, user_embedding)
+
     def _predict(self, user_id, item_id):
         return np.dot(self.user_embeddings[user_id], self.item_embeddings[item_id])
 

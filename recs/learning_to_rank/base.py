@@ -77,8 +77,6 @@ class LTRBase:
                     if item_id != item_ids[i] and cur_item_score >= predictions[i]:
                         ranks.data[row_start + i] += 1.0
         return ranks
-                
-            
         
     def _predict(self, usr_id, item_id):
         user_bias, user_embedding = self.user_biases[usr_id], self.user_embeddings[usr_id,:]
