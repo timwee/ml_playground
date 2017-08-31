@@ -1,1 +1,1 @@
-Scratchpad for toy implementations of numerical optimization and machine learning algorithms
+Learning implementations of numerical optimization and machine learning algorithms
