@@ -16,7 +16,7 @@ def dsigmoid(x):
     return dsigmoid_from_pred(sigmoid(x))
     # return np.exp(-x) / (1 + np.exp(-x))**2
 
-
+EPSILON = 1e-8
 
 class CLiMF(LTRBase):
     """
@@ -97,15 +97,19 @@ class CLiMF(LTRBase):
     def _predict(self, user_id, item_id):
         return np.dot(self.user_embeddings[user_id], self.item_embeddings[item_id])
 
-    def fit(self, train, epochs=1, reset=True):
+    def fit(self, train, lr=None, epochs=1, reset=True, debug=True):
         num_users, num_items = train.shape
         if self.user_embeddings is None or reset:
             print("initializing embeddings")
             self._init_embeddings(num_users, num_items)
+        if lr is None:
+            lr = self.lr
         for epoch in range(epochs):
-            self._run_epoch(train)
+            self._run_epoch(train, lr=lr, debug=debug)
 
-    def _run_epoch(self, train, debug=True):
+    def _run_epoch(self, train, lr=None, debug=True):
+        if lr is None:
+            lr = self.lr
         num_users, num_items = train.shape
         for user_id in range(num_users):
             item_ids, item_vals = nnz_csrrow(train, user_id)
@@ -138,7 +142,7 @@ class CLiMF(LTRBase):
                 dU_first_term = np.squeeze(g_mfi_V[j])
 
                 # second term
-                dU_second_term = (dsigmoid(fk_minus_fj) / (1-sigmoid(fk_minus_fj)))
+                dU_second_term = (dsigmoid(fk_minus_fj) / (1-sigmoid(fk_minus_fj) + EPSILON))
                 assert dU_second_term.shape == (len(item_ids),)
                 dU_second_term = dU_second_term.reshape((-1,1)) * (V[j]-V)
                 assert dU_second_term.shape == (len(item_ids), self.num_factors)
@@ -151,15 +155,15 @@ class CLiMF(LTRBase):
                 dV_first_term = g_mfi[j]
                 dV_second_term = dsigmoid(fj_minus_fk)
                 assert dV_second_term.shape == (len(item_ids),)
-                dV_second_term *= ((1. / (1. - sigmoid(fj_minus_fk))) - \
-                                   (1. / (1. - sigmoid(fk_minus_fj))))
+                dV_second_term *= ((1. / (1. - sigmoid(fj_minus_fk) + EPSILON)) - \
+                                   (1. / (1. - sigmoid(fk_minus_fj) + EPSILON)))
                 assert dV_second_term.shape == (len(item_ids),)
                 dVj = np.sum(dV_first_term + dV_second_term)
                 dV[j] += user_embedding * dVj
 
             # update embeddings
-            self.item_embeddings[item_ids] += self.lr * dV
-            self.user_embeddings[user_id] += self.lr * dU
+            self.item_embeddings[item_ids] += lr * dV
+            self.user_embeddings[user_id] += lr * dU
         if debug:
             print("Objective is: ", self.compute_objective(train))
 
