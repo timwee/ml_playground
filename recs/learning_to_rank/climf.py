@@ -23,15 +23,15 @@ class CLiMF(LTRBase):
     CLiMF: Learning to Maximize Reciprocal Rank with Collaborative Less-is-More Filtering
     http://baltrunas.info/papers/Shi12-climf.pdf
     """
-    def __init__(self, num_factors=32, lr=5e-7, reg=0.01, random_state=None, dtype=np.float32):
+    def __init__(self, optim, num_factors=32, reg=0.001, random_state=None, dtype=np.float32):
         self.dtype = dtype
         self.num_factors = num_factors
-        self.lr = lr
         self.reg = reg
         self.random_state = random_state
         if self.random_state is None:
             self.random_state = np.random.RandomState()
         self.user_embeddings = self.item_embeddings = None
+        self.optim = optim
 
     def _init_embeddings(self, num_users, num_items):
         self.user_embeddings = (self.random_state.rand(num_users, self.num_factors) - 0.5) / self.num_factors
@@ -97,19 +97,16 @@ class CLiMF(LTRBase):
     def _predict(self, user_id, item_id):
         return np.dot(self.user_embeddings[user_id], self.item_embeddings[item_id])
 
-    def fit(self, train, lr=None, epochs=1, reset=True, debug=True):
+    def fit(self, train, cur_iter=None, reset=True, debug=True):
         num_users, num_items = train.shape
         if self.user_embeddings is None or reset:
             print("initializing embeddings")
             self._init_embeddings(num_users, num_items)
-        if lr is None:
-            lr = self.lr
-        for epoch in range(epochs):
-            self._run_epoch(train, lr=lr, debug=debug)
+        self._run_epoch(train, cur_iter=cur_iter, debug=debug)
 
-    def _run_epoch(self, train, lr=None, debug=True):
-        if lr is None:
-            lr = self.lr
+    def _run_epoch(self, train, cur_iter=None, debug=True):
+        if not cur_iter:
+            cur_iter = 1
         num_users, num_items = train.shape
         for user_id in range(num_users):
             item_ids, item_vals = nnz_csrrow(train, user_id)
@@ -162,8 +159,10 @@ class CLiMF(LTRBase):
                 dV[j] += user_embedding * dVj
 
             # update embeddings
-            self.item_embeddings[item_ids] += lr * dV
-            self.user_embeddings[user_id] += lr * dU
+            self.optim(weights=self.item_embeddings, grads=-dV, idxs=item_ids, cur_iter=cur_iter, param_name="item_embeddings")
+            self.optim(weights=self.user_embeddings, grads=-dU, idxs=user_id, cur_iter=cur_iter, param_name="user_embeddings")
+            #self.item_embeddings[item_ids] += lr * dV
+            #self.user_embeddings[user_id] += lr * dU
         if debug:
             print("Objective is: ", self.compute_objective(train))
 

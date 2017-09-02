@@ -17,7 +17,7 @@ class BPR(LTRBase):
     BPR: Bayesian Personalized Ranking from Implicit Feedback
     Steffen Rendle, Christoph Freudenthaler, Zeno Gantner, Lars Schmidt-Thieme
     """
-    def _train_epoch(self, train):
+    def _train_epoch(self, train, cur_iter):
         num_users, num_items = train.shape
         shuffled_users = np.arange(num_users)
         self.random_state.shuffle(shuffled_users)
@@ -40,29 +40,42 @@ class BPR(LTRBase):
                     neg_item_score = self._predict(user_id, neg_item_id)
                     # found a candidate negative item
                     loss =  (1.0 - sigmoid(pos_item_score - neg_item_score))
+
+                    avg_lr = 0.0
+
                     # update biases
-                    self._update_bias_grad(self.user_biases, user_id, loss, self.user_reg)
-                    self._update_bias_grad(self.item_biases, neg_item_id, loss, self.item_reg)
-                    self._update_bias_grad(self.item_biases, pos_item_id, -loss, self.item_reg)
+                    avg_lr += self._update_bias_grad(self.user_biases, user_id, loss, self.user_reg, \
+                        item_key="user_bias", cur_iter=cur_iter)
+                    avg_lr += self._update_bias_grad(self.item_biases, neg_item_id, loss, self.item_reg, \
+                        item_key="item_bias", cur_iter=cur_iter)
+                    avg_lr += self._update_bias_grad(self.item_biases, pos_item_id, -loss, self.item_reg, \
+                        item_key="item_bias", cur_iter=cur_iter)
                     
                     user_embedding = self.user_embeddings[user_id,:]
                     pos_item_embedding = self.item_embeddings[pos_item_id,:]
                     neg_item_embedding = self.item_embeddings[neg_item_id,:]
                     # update latent factors
-                    self._update_latent_vector_grad(self.user_embeddings, \
+                    avg_lr += self._update_latent_vector_grad(self.user_embeddings, \
                                               user_id, \
                                               loss * (neg_item_embedding - pos_item_embedding), \
-                                              self.user_reg)
-                    self._update_latent_vector_grad(self.item_embeddings, \
+                                              self.user_reg,
+                                              item_key="user_embeddings", \
+                                              cur_iter=cur_iter)
+                    avg_lr += self._update_latent_vector_grad(self.item_embeddings, \
                                               pos_item_id, \
                                               -loss * user_embedding, \
-                                              self.item_reg)
-                    self._update_latent_vector_grad(self.item_embeddings, \
+                                              self.item_reg,
+                                              item_key="item_embeddings", \
+                                              cur_iter=cur_iter)
+                    avg_lr += self._update_latent_vector_grad(self.item_embeddings, \
                                               neg_item_id, \
                                               loss * user_embedding, \
-                                              self.item_reg)
-                    self.user_scale *= (1.0 + self.user_reg * self.lr)
-                    self.item_scale *= (1.0 + self.item_reg * self.lr)
+                                              self.item_reg,
+                                              item_key="item_embeddings", \
+                                              cur_iter=cur_iter)
+                    avg_lr /= (3. + (self.num_factors * 3))
+                    self.user_scale *= (1.0 + self.user_reg * avg_lr)
+                    self.item_scale *= (1.0 + self.item_reg * avg_lr)
                     break
                 if self.user_scale > self.MAX_REG_SCALE or self.item_scale >self.MAX_REG_SCALE:
                     #print("regularizing!")

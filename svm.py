@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-from gradient_descent_optimizers import SGDOptimizer
+from optim.gradient_descent_optimizers import SGDOptimizer
 import numpy as np
 import math
 from sklearn.utils.extmath import safe_sparse_dot

@@ -4,6 +4,7 @@ import scipy.sparse as sps
 
 DECAY = 0.8
 MIN_LRATE = 1e-4
+PRINT_INTERVAL = 10
 
 class SGDOptimizer:
 	def __init__(self, num_iter=100, batchsize=64, lrate=1e-2, reg=1e-3, decay=0.0):
@@ -29,7 +30,8 @@ class SGDOptimizer:
 		        last_loss = loss
 		        W += -lrate * dW
 		    lrate *= 1. / (1. + (self.decay * it))
-		    print("iteration %d, loss %f" % (it, last_loss))
+		    if it % PRINT_INTERVAL == 0:
+		    	print("iteration %d, loss %f" % (it, last_loss))
 		    #if (it % 10) == 0 and it > 0 and self.lr_sched:
 		    	#print("lessening learning rate from %f to %f" % (lrate, lrate * DECAY))
 		    	#lrate *= DECAY
@@ -53,8 +55,8 @@ class SGDOptimizer:
 		        last_loss = loss
 		        W += -lrate * dW
 		    lrate *= 1. / (1. + (self.decay * it))
-		    #if it % 10 == 0:
-		    print("iteration %d, loss %f" % (it, last_loss))
+		    if it % PRINT_INTERVAL == 0:
+		    	print("iteration %d, loss %f" % (it, last_loss))
 		    # if (it % 10) == 0 and it > 0 and self.lr_sched:
 		    # 	print("lessening learning rate from %f to %f" % (lrate, lrate * DECAY))
 		    # 	lrate *= DECAY

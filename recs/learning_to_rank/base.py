@@ -14,9 +14,12 @@ def nnz_csrrow(m, rownum):
 
 class LTRBase:
 
-    def __init__(self, num_factors=32, max_samples=125, lr=1e-7, item_reg=0.0, user_reg=0.0, \
+    def __init__(self, optim, num_factors=32, max_samples=125, item_reg=0.0, user_reg=0.0, \
                  kos=5, random_state=None, dtype=np.float32):
         """
+        Lazily regularize:
+        https://lingpipe.files.wordpress.com/2008/04/lazysgdregression.pdf
+
         Parameters
         ----------
         num_factors : int
@@ -33,11 +36,11 @@ class LTRBase:
               Used for k-os warp
         """
         self.kos = kos
+        self.optim = optim
         self.MAX_REG_SCALE = 1000000
         self.MAX_LOSS = 100
         self.num_factors = num_factors
         self.max_samples = max_samples
-        self.lr = lr
         self.item_reg = item_reg
         self.user_reg = user_reg
         self.dtype=dtype
@@ -92,15 +95,19 @@ class LTRBase:
         self.user_biases = np.zeros((num_users,), dtype=self.dtype)
         self.item_biases = np.zeros((num_items,), dtype=self.dtype)
 
-    def _update_bias_grad(self, bias_vector, bias_idx, grad, reg):
-        bias_vector[bias_idx] -= self.lr * grad
+    def _update_bias_grad(self, bias_vector, bias_idx, grad, reg, item_key, cur_iter):
+        lr = self.optim(weights=bias_vector, grads=grad, idxs=bias_idx, cur_iter=cur_iter, param_name=item_key)
+        #bias_vector[bias_idx] -= self.lr * grad
         # account for regularization
-        bias_vector[bias_idx] *= (1.0 + reg * self.lr)
+        bias_vector[bias_idx] *= (1.0 + reg * lr)
+        return lr
         
-    def _update_latent_vector_grad(self, latent_vector, idx, grad, reg):
-        latent_vector[idx,:] -= self.lr * grad
+    def _update_latent_vector_grad(self, latent_vector, idx, grad, reg, item_key, cur_iter):
+        lr = self.optim(weights=latent_vector, grads=grad, idxs=idx, cur_iter=cur_iter, param_name=item_key)
+        #latent_vector[idx,:] -= self.lr * grad
         # regularization
-        latent_vector[idx,:] *= (1.0 + reg * self.lr)
+        latent_vector[idx,:] *= (1.0 + reg * lr)
+        return lr * self.num_factors
         
     def _regularize(self):
         self.item_embeddings /= self.item_scale
@@ -110,14 +117,14 @@ class LTRBase:
         self.item_scale = 1.0
         self.user_scale = 1.0
     
-    def fit(self, train, epochs=1, reset=True):
+    def fit(self, train, cur_iter=1, reset=True):
         num_users, num_items = train.shape
         if self.item_embeddings is None or reset:
             print("initializing embeddings and biases")
             self._initialize_embeddings(num_users, num_items)
             self._initialize_biases(num_users, num_items)
-        for epoch in range(epochs):
-            self._train_epoch(train)
+        #for epoch in range(epochs):
+        self._train_epoch(train, cur_iter=cur_iter)
         
-    def _train_epoch(self, train):
+    def _train_epoch(self, train, cur_iter=None):
         raise NotImplementedError("to override")

@@ -1,6 +1,8 @@
 #! /usr/bin/env python
 import numpy as np
 
+PRINT_INTERVAL = 10
+
 class SGDWithMomentum:
 	def __init__(self, lr=0.01, momentum=0.0, decay=0.0, nesterov=False, num_epochs=100, batchsize=64, l2_reg=1e-3):
 		self.lr = lr
@@ -33,6 +35,7 @@ class SGDWithMomentum:
 		        #loss_history.append(loss)
 		        last_loss = loss
 		    lrate *= 1. / (1. + (self.decay * it))
-		    print("iteration %d, loss %f" % (it, last_loss))
+		    if it % PRINT_INTERVAL == 0:
+		    	print("iteration %d, loss %f" % (it, last_loss))
 
 		return last_loss

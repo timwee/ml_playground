@@ -4,6 +4,7 @@ import numpy as np
 import math
 
 EPS = 1e-8
+PRINT_INTERVAL = 10
 
 class RMSProp:
 	def __init__(self, lr=1e-3, rho=0.9, epsilon=EPS, decay=0.0, num_epochs=100, batchsize=64, l2_reg=1e-3):
@@ -32,7 +33,8 @@ class RMSProp:
 		        last_loss = loss
 		    if self.decay > 0:
 		     	lrate *= 1. / (1. + (self.decay * it))
-		    print("iteration %d, loss %f" % (it, last_loss))
+		    if it % PRINT_INTERVAL == 0:
+		    	print("iteration %d, loss %f" % (it, last_loss))
 
 		return last_loss
 
@@ -64,7 +66,8 @@ class AdaGrad:
 		        last_loss = loss
 		    if self.decay > 0:
 		     	lrate *= 1. / (1. + (self.decay * it))
-		    print("iteration %d, loss %f" % (it, last_loss))
+		    if it % PRINT_INTERVAL == 0:
+		    	print("iteration %d, loss %f" % (it, last_loss))
 
 		return last_loss
 
@@ -100,7 +103,8 @@ class AdaDelta:
 		        last_loss = loss
 		    if self.decay > 0:
 		     	lrate *= 1. / (1. + (self.decay * it))
-		    print("iteration %d, loss %f" % (it, last_loss))
+		    if it % PRINT_INTERVAL == 0:
+		    	print("iteration %d, loss %f" % (it, last_loss))
 
 		return last_loss
 
@@ -150,7 +154,8 @@ class Adamax:
 				last_loss = loss
 			if self.decay > 0:
 				lrate *= 1. / (1. + (self.decay * it))
-			print("iteration %d, loss %f" % (it, last_loss))
+			if it % PRINT_INTERVAL == 0:
+				print("iteration %d, loss %f" % (it, last_loss))
 
 		return last_loss
 
@@ -199,7 +204,8 @@ class Adam:
 				last_loss = loss
 			if self.decay > 0:
 				lrate *= 1. / (1. + (self.decay * it))
-			print("iteration %d, loss %f" % (it, last_loss))
+			if it % PRINT_INTERVAL == 0:
+				print("iteration %d, loss %f" % (it, last_loss))
 
 		return last_loss
 
@@ -260,7 +266,8 @@ class NAdam:
 
 				W -= lrate * (m_t_bar / (np.sqrt(v_t_unbiased) + self.epsilon))
 				last_loss = loss
-			print("iteration %d, loss %f" % (it, last_loss))
+			if it % PRINT_INTERVAL == 0:
+				print("iteration %d, loss %f" % (it, last_loss))
 
 		return last_loss
 
