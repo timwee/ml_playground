@@ -57,27 +57,28 @@ class BPR(LTRBase):
                     # update latent factors
                     avg_lr += self._update_latent_vector_grad(self.user_embeddings, \
                                               user_id, \
-                                              loss * (neg_item_embedding - pos_item_embedding), \
+                                              loss * (neg_item_embedding - pos_item_embedding) + self.user_reg * user_embedding, \
                                               self.user_reg,
                                               item_key="user_embeddings", \
                                               cur_iter=cur_iter)
                     avg_lr += self._update_latent_vector_grad(self.item_embeddings, \
                                               pos_item_id, \
-                                              -loss * user_embedding, \
+                                              -loss * user_embedding + self.item_reg * pos_item_embedding, \
                                               self.item_reg,
                                               item_key="item_embeddings", \
                                               cur_iter=cur_iter)
                     avg_lr += self._update_latent_vector_grad(self.item_embeddings, \
                                               neg_item_id, \
-                                              loss * user_embedding, \
+                                              loss * user_embedding + self.item_reg * neg_item_embedding, \
                                               self.item_reg,
                                               item_key="item_embeddings", \
                                               cur_iter=cur_iter)
-                    avg_lr /= (3. + (self.num_factors * 3))
-                    self.user_scale *= (1.0 + self.user_reg * avg_lr)
-                    self.item_scale *= (1.0 + self.item_reg * avg_lr)
+                    #avg_lr /= (3. + (self.num_factors * 3))
+                    #self.user_scale *= (1.0 + self.user_reg * avg_lr)
+                    #self.item_scale *= (1.0 + self.item_reg * avg_lr)
                     break
                 if self.user_scale > self.MAX_REG_SCALE or self.item_scale >self.MAX_REG_SCALE:
                     #print("regularizing!")
-                    self._regularize()
-        self._regularize()
+                    pass
+                    #self._regularize()
+        #self._regularize()

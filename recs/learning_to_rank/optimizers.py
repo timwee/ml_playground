@@ -116,8 +116,8 @@ class NAdam:
 
         m_t_bar = (1. - momentum_cache_t) * g_prime + momentum_cache_t_1 * m_t_unbiased
 
-        #lr = lrate * (math.sqrt(1. - math.pow(self.beta_2, it + 1)) / (1. - math.pow(self.beta_1, it + 1)))
-        lr = self.lr
+        lr = self.lr * (math.sqrt(1. - math.pow(self.beta_2, t + 1)) / (1. - math.pow(self.beta_1, t + 1)))
+        #lr = self.lr
         weights[idxs] -= lr * (m_t_bar / (np.sqrt(v_t_unbiased) + self.epsilon))
 
         return lr
